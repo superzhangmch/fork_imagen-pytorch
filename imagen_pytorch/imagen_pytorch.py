@@ -1529,7 +1529,7 @@ class Unet(nn.Module):
         text_mask = None,
         cond_images = None,
         self_cond = None,
-        cond_drop_prob = 0.
+        cond_drop_prob = 0. # 若要classifier free guidance生成，则需要对condition作dropout。此为dropout概率。从下文看，只针对text条件; 并不会针对超分时的lowres_cond_img
     ):
         batch_size, device = x.shape[0], x.device
 
@@ -1545,7 +1545,7 @@ class Unet(nn.Module):
         assert not (self.lowres_cond and not exists(lowres_noise_times)), 'low resolution conditioning noise time must be present'
 
         if exists(lowres_cond_img):
-            x = torch.cat((x, lowres_cond_img), dim = 1)
+            x = torch.cat((x, lowres_cond_img), dim = 1) # low_res_img 拼接去，而不作概率性的归零
 
         # condition on input image
 
