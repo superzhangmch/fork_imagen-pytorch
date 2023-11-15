@@ -1408,7 +1408,7 @@ class Unet(nn.Module):
                 resnet_klass(dim_out + skip_connect_dim, dim_out, cond_dim = layer_cond_dim, linear_attn = layer_use_linear_cross_attn, time_cond_dim = time_cond_dim, groups = groups),
                 nn.ModuleList([ResnetBlock(dim_out + skip_connect_dim, dim_out, time_cond_dim = time_cond_dim, groups = groups, use_gca = use_global_context_attn) for _ in range(layer_num_resnet_blocks)]),
                 transformer_block_klass(dim = dim_out, depth = layer_attn_depth, ff_mult = ff_mult, context_dim = cond_dim, **attn_kwargs),
-                upsample_klass(dim_out, dim_in) if not is_last or memory_efficient else Identity() # 先conv后sample，已经是符合《imagen》一文所说的efficient Unet之要求
+                upsample_klass(dim_out, dim_in) if not is_last or memory_efficient else Identity() # 先conv后sample，已经是符合《imagen》一文所说的efficient Unet之要求.但注意，这里每像downsample阶段那样搞成pre_upsample/down_sample大概因为现在的好多实现是基于《improved DDPM》的unet，而该处在upsample阶段已经是先conv后upsample
             ]))
             ''' 下面来自《imagen》一文：
             In a typical U-Net’s downsampling block, the downsampling operation happens after the
