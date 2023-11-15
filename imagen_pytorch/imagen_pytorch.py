@@ -1360,10 +1360,12 @@ class Unet(nn.Module):
 
             post_downsample = None
             if not memory_efficient:
-                post_downsample = downsample_klass(current_dim, dim_out) if not is_last else Parallel(nn.Conv2d(dim_in, dim_out, 3, padding = 1), nn.Conv2d(dim_in, dim_out, 1))
+                post_downsample = downsample_klass(current_dim, dim_out) if not is_last else Parallel(nn.Conv2d(dim_in, dim_out, 3, padding = 1), nn.Conv2d(dim_in, dim_out, 1)) 
+                # 如果是最后一个resolution，则本resolution的最后不作down sample（从而保证了最小分辨率的block和middle_block保持了同样的分辨率）
+                # 如果是先efficient-unet那样的先downsample，则仍然保持了middle_block和其前block分辨率之相同。
 
             self.downs.append(nn.ModuleList([
-                pre_downsample,
+                pre_downsample, # 若 efficient_Unet，则先downsample
                 resnet_klass(current_dim, current_dim, cond_dim = layer_cond_dim, linear_attn = layer_use_linear_cross_attn, time_cond_dim = time_cond_dim, groups = groups),
                 nn.ModuleList([ResnetBlock(current_dim, current_dim, time_cond_dim = time_cond_dim, groups = groups, use_gca = use_global_context_attn) for _ in range(layer_num_resnet_blocks)]),
                 transformer_block_klass(dim = current_dim, depth = layer_attn_depth, ff_mult = ff_mult, context_dim = cond_dim, **attn_kwargs),
@@ -1406,8 +1408,17 @@ class Unet(nn.Module):
                 resnet_klass(dim_out + skip_connect_dim, dim_out, cond_dim = layer_cond_dim, linear_attn = layer_use_linear_cross_attn, time_cond_dim = time_cond_dim, groups = groups),
                 nn.ModuleList([ResnetBlock(dim_out + skip_connect_dim, dim_out, time_cond_dim = time_cond_dim, groups = groups, use_gca = use_global_context_attn) for _ in range(layer_num_resnet_blocks)]),
                 transformer_block_klass(dim = dim_out, depth = layer_attn_depth, ff_mult = ff_mult, context_dim = cond_dim, **attn_kwargs),
-                upsample_klass(dim_out, dim_in) if not is_last or memory_efficient else Identity()
+                upsample_klass(dim_out, dim_in) if not is_last or memory_efficient else Identity() # 先conv后sample，已经是符合《imagen》一文所说的efficient Unet之要求
             ]))
+            ''' 下面来自《imagen》一文：
+            In a typical U-Net’s downsampling block, the downsampling operation happens after the
+            convolutions, and in an upsampling block, the upsampling operation happens prior the
+            convolution. We reverse this order for both downsampling and upsampling blocks in order
+            to significantly improve the speed of the forward pass of the U-Net, and find no performance
+            degradation.
+            普通unet，先conv再downsample，先upsample再conv。efficient-unet反之：先downsample后conv，先conv后upsample
+            之所以说efficient Unet 能speedup，是因为：只调整上下采样顺序，是不影响参数量的，毕竟在不同的block组内，channel数等参数是一样的。但是该组内的分辨率因为先降或后升，从而处理的分辨率只是typical Unet的四分之一，从而可以极大加速
+            '''
 
         # whether to combine feature maps from all upsample blocks before final resnet block out
 
@@ -1658,7 +1669,7 @@ class Unet(nn.Module):
 
         # initial resnet block (for memory efficient unet)
 
-        if exists(self.init_resnet_block):
+        if exists(self.init_resnet_block): # 若开启了memory_efficient_unet 模式，则是先downsample后卷积，从而在进入unet前需要先resBlock处理下
             x = self.init_resnet_block(x, t)
 
         # go through the layers of the unet, down and up
@@ -2606,7 +2617,7 @@ class Imagen(nn.Module):
         elif pred_objective == 'v':
             # derivation detailed in Appendix D of Progressive Distillation paper
             # https://arxiv.org/abs/2202.00512
-            # this makes distillation viable as well as solve an issue with color shifting in upresoluting unets, noted in imagen-video
+            # this makes distillation viable as well as solve an issue with color shifting in upresoluting unets, noted in imagen-video. 另外 noise_offset 也能改善color shift
             target = alpha * noise - sigma * x_start
         else:
             raise ValueError(f'unknown objective {pred_objective}')
