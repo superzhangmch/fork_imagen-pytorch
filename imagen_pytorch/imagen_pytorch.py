@@ -1370,6 +1370,7 @@ class Unet(nn.Module):
                 nn.ModuleList([ResnetBlock(current_dim, current_dim, time_cond_dim = time_cond_dim, groups = groups, use_gca = use_global_context_attn) for _ in range(layer_num_resnet_blocks)]),
                 transformer_block_klass(dim = current_dim, depth = layer_attn_depth, ff_mult = ff_mult, context_dim = cond_dim, **attn_kwargs),
                 # 多个resnetBlock后来一个transformerBlock而不是每个resnetBlock都有一个transformerBlock，是Imagen Efficient Unet风格的Unet，而非<<DDPM>>原版风格的Unet
+                # 对这样的做法，本代码库作者的解释：https://github.com/lucidrains/imagen-pytorch/issues/116
                 post_downsample
             ]))
 
